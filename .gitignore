@@ -89,3 +89,6 @@ public
 # Temporary folders
 tmp/
 temp/
+
+# Session data (local storage)
+data/

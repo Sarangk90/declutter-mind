@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Target, Zap, Clock, TrendingUp, CheckCircle, ArrowRight, Lightbulb, Grid3x3, Calendar, User, Send, AlertCircle } from 'lucide-react';
+import { Plus, Target, Zap, Clock, TrendingUp, CheckCircle, ArrowRight, Lightbulb, Grid3x3, Calendar, User, Send, AlertCircle, Save, FolderOpen, FileText, Trash2 } from 'lucide-react';
 
 const CompleteActionPlanningTool = () => {
   // 5 Whys state
@@ -31,6 +31,13 @@ const CompleteActionPlanningTool = () => {
     frequency: 'daily'
   });
   
+  // Session management state
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [savedSessions, setSavedSessions] = useState([]);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  
   const stepRefs = useRef([]);
 
   const steps = [
@@ -46,6 +53,157 @@ const CompleteActionPlanningTool = () => {
       stepRefs.current[currentStep].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [currentStep]);
+
+  // Session management functions
+  const getCurrentSessionData = () => ({
+    id: currentSessionId,
+    title: problem.substring(0, 50) || 'Untitled Session',
+    problemStatement: problem,
+    whys,
+    followUpQuestions,
+    currentWhyStep,
+    fiveWhysAnalysis,
+    currentStep,
+    solutions,
+    selectedSolution,
+    matrixPosition,
+    smartGoals,
+    implementations,
+    currentGoal,
+    currentImplementation,
+    createdAt: currentSessionId ? undefined : new Date().toISOString()
+  });
+
+  const saveSession = async () => {
+    setIsSavingSession(true);
+    try {
+      const sessionData = getCurrentSessionData();
+      const response = await fetch('http://localhost:3001/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData)
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setCurrentSessionId(result.sessionId);
+        alert('Session saved successfully!');
+        loadSessionList();
+      } else {
+        alert('Failed to save session');
+      }
+    } catch (error) {
+      console.error('Error saving session:', error);
+      alert('Failed to save session');
+    }
+    setIsSavingSession(false);
+  };
+
+  const loadSession = async (sessionId) => {
+    setIsLoadingSession(true);
+    try {
+      console.log('Loading session:', sessionId);
+      const response = await fetch(`http://localhost:3001/api/sessions/${sessionId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const sessionData = await response.json();
+      console.log('Loaded session data:', sessionData);
+      
+      if (sessionData && sessionData.id) {
+        console.log('Setting state with session data...');
+        setProblem(sessionData.problemStatement || '');
+        setWhys(sessionData.whys || ['', '', '', '', '']);
+        setFollowUpQuestions(sessionData.followUpQuestions || ['', '', '', '', '']);
+        setCurrentWhyStep(sessionData.currentWhyStep || 0);
+        setFiveWhysAnalysis(sessionData.fiveWhysAnalysis || null);
+        setCurrentStep(sessionData.currentStep || 0);
+        setSolutions(sessionData.solutions || []);
+        setSelectedSolution(sessionData.selectedSolution || null);
+        setMatrixPosition(sessionData.matrixPosition || { impact: 5, effort: 5 });
+        setSmartGoals(sessionData.smartGoals || []);
+        setImplementations(sessionData.implementations || []);
+        setCurrentGoal(sessionData.currentGoal || {
+          specific: '', measurable: '', achievable: '', relevant: '', timebound: ''
+        });
+        setCurrentImplementation(sessionData.currentImplementation || {
+          situation: '', action: '', frequency: 'daily'
+        });
+        setCurrentSessionId(sessionData.id);
+        setShowSessionModal(false);
+        
+        // Force re-render by updating loading state
+        setTimeout(() => {
+          console.log('Session loaded successfully');
+          alert('Session loaded successfully!');
+        }, 100);
+      } else {
+        throw new Error('Invalid session data received');
+      }
+    } catch (error) {
+      console.error('Error loading session:', error);
+      alert('Failed to load session: ' + error.message);
+    }
+    setIsLoadingSession(false);
+  };
+
+  const loadSessionList = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/sessions');
+      const sessions = await response.json();
+      setSavedSessions(sessions);
+    } catch (error) {
+      console.error('Error loading session list:', error);
+    }
+  };
+
+  const deleteSession = async (sessionId) => {
+    if (window.confirm('Are you sure you want to delete this session?')) {
+      try {
+        const response = await fetch(`http://localhost:3001/api/sessions/${sessionId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          if (currentSessionId === sessionId) {
+            setCurrentSessionId(null);
+          }
+          loadSessionList();
+          alert('Session deleted successfully!');
+        } else {
+          alert('Failed to delete session');
+        }
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        alert('Failed to delete session');
+      }
+    }
+  };
+
+  const startNewSession = () => {
+    if (window.confirm('Start a new session? Any unsaved progress will be lost.')) {
+      setProblem('');
+      setWhys(['', '', '', '', '']);
+      setFollowUpQuestions(['', '', '', '', '']);
+      setCurrentWhyStep(0);
+      setFiveWhysAnalysis(null);
+      setCurrentStep(0);
+      setSolutions([]);
+      setSelectedSolution(null);
+      setMatrixPosition({ impact: 5, effort: 5 });
+      setSmartGoals([]);
+      setImplementations([]);
+      setCurrentGoal({ specific: '', measurable: '', achievable: '', relevant: '', timebound: '' });
+      setCurrentImplementation({ situation: '', action: '', frequency: 'daily' });
+      setCurrentSessionId(null);
+    }
+  };
+
+  useEffect(() => {
+    loadSessionList();
+  }, []);
 
   // 5 Whys Functions
   const generateFollowUpQuestion = async (stepIndex) => {
@@ -435,6 +593,120 @@ Respond with JSON:
             From root cause analysis to concrete action plans - one seamless journey
           </p>
         </div>
+
+        {/* Session Management Controls */}
+        <div className="bg-white rounded-xl p-4 shadow-lg mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">
+                {currentSessionId ? 'Current session saved' : 'Unsaved session'}
+              </span>
+              {currentSessionId && (
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                  {currentSessionId}
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={startNewSession}
+                className="flex items-center gap-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                <FileText className="w-4 h-4" />
+                New Session
+              </button>
+              
+              <button
+                onClick={saveSession}
+                disabled={isSavingSession || !problem.trim()}
+                className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavingSession ? (
+                  <>Saving...</>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Session
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={() => setShowSessionModal(true)}
+                className="flex items-center gap-1 px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Load Session
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Session Modal */}
+        {showSessionModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold" style={{ color: '#3F3F47' }}>
+                  Load Session
+                </h3>
+                <button
+                  onClick={() => setShowSessionModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {savedSessions.length === 0 ? (
+                <p className="text-gray-600 text-center py-8">
+                  No saved sessions found. Start working on a problem and save your progress!
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {savedSessions.map((session) => (
+                    <div key={session.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 mb-1">
+                            {session.title}
+                          </h4>
+                          <p className="text-sm text-gray-600 mb-2">
+                            {session.problemStatement}
+                          </p>
+                          <div className="text-xs text-gray-500">
+                            Created: {new Date(session.createdAt).toLocaleDateString()}
+                            {session.updatedAt !== session.createdAt && (
+                              <span> • Updated: {new Date(session.updatedAt).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => loadSession(session.id)}
+                            disabled={isLoadingSession}
+                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {isLoadingSession ? 'Loading...' : 'Load'}
+                          </button>
+                          <button
+                            onClick={() => deleteSession(session.id)}
+                            className="p-1 text-red-600 hover:text-red-800"
+                            title="Delete session"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <StepIndicator />
 
